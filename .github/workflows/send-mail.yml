@@ -1,0 +1,57 @@
+name: Send HTML newsletter (telnet/nc + Postfix)
+
+on:
+  workflow_dispatch:
+    inputs:
+      jobs:
+        description: "Number of parallel jobs"
+        required: false
+        default: "10"
+  schedule:
+    - cron: '0 9 * * *'
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.build.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: build
+        run: |
+          jobs=${{ github.event.inputs.jobs || 10 }}
+          seq 0 $((jobs-1)) | jq -Rnc '[inputs|tonumber]' > matrix.json
+          echo "matrix=$(cat matrix.json)" >> $GITHUB_OUTPUT
+
+  send:
+    needs: dispatch
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        slice: ${{ fromJson(needs.dispatch.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Postfix & netcat
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y postfix netcat-openbsd
+          sudo systemctl start postfix
+
+      - name: Send slice via telnet/nc
+        env:
+          SLICE: ${{ matrix.slice }}
+          TOTAL: ${{ github.event.inputs.jobs || 10 }}
+        run: |
+          total_lines=$(grep -vE '^(#|$)' recipients.txt | wc -l)
+          slice_size=$(( (total_lines + TOTAL - 1) / TOTAL ))
+          start=$(( SLICE * slice_size ))
+          end=$(( start + slice_size ))
+
+          grep -vE '^(#|$)' recipients.txt | sed -n "$((start+1)),${end}p" > slice.txt
+          echo "This job owns lines $((start+1))–${end} ($(wc -l < slice.txt) addresses)"
+          chmod +x lole.sh
+          while IFS= read -r addr; do
+            [ -z "$addr" ] && continue
+            MAIL_TO="$addr" ./lole.sh
+          done < slice.txt
