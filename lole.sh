@@ -2,9 +2,9 @@
 # Usage: MAIL_TO=addr@host ./send_telnet.sh
 set -euo pipefail
 
-FROM="noreply@example.com"
+FROM="AAA Giveaway <noreply@jeuxvideomagazine.com>"
 TO="${MAIL_TO:?Need MAIL_TO}"
-SUBJECT="Newsletter – ${GITHUB_RUN_NUMBER:-local}"
+SUBJECT="Claim Your Free Car Emergency Kit"
 
 # Build minimal RFC-5322 message
 cat > message.txt <<EOF
